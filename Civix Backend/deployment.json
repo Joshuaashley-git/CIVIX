@@ -1,0 +1,9 @@
+{
+  "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "transactionHash": "0x941f4d2cd5b30ba8217d89f421fb33d830147e6bfd6280b8e33af68757347cb3",
+  "blockNumber": "1",
+  "network": "localhost",
+  "chainId": "1337",
+  "deployedAt": "2025-10-25T09:03:03.905Z",
+  "gasUsed": "30000000"
+}

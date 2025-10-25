@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Civix Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        .status-connected {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        .status-disconnected {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="gradient-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-vote-yea text-white text-2xl mr-3"></i>
+                    <h1 class="text-white text-xl font-bold">Civix Admin Panel</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div id="blockchain-status" class="flex items-center">
+                        <div class="w-3 h-3 rounded-full mr-2" id="status-indicator"></div>
+                        <span class="text-white text-sm" id="status-text">Checking...</span>
+                    </div>
+                    <button onclick="refreshData()" class="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-all">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Dashboard Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                        <i class="fas fa-poll text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Elections</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-elections">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                        <i class="fas fa-play-circle text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Active Elections</p>
+                        <p class="text-2xl font-bold text-gray-900" id="active-elections">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                        <i class="fas fa-vote-yea text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Votes</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-votes">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-orange-100 text-orange-600">
+                        <i class="fas fa-users text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Candidates</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-candidates">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="bg-white rounded-xl shadow-lg mb-8">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8 px-6">
+                    <button onclick="showTab('dashboard')" id="tab-dashboard" class="tab-button py-4 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600">
+                        <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                    </button>
+                    <button onclick="showTab('elections')" id="tab-elections" class="tab-button py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        <i class="fas fa-poll mr-2"></i>Elections
+                    </button>
+                    <button onclick="showTab('votes')" id="tab-votes" class="tab-button py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        <i class="fas fa-vote-yea mr-2"></i>Votes
+                    </button>
+                    <button onclick="showTab('candidates')" id="tab-candidates" class="tab-button py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        <i class="fas fa-users mr-2"></i>Candidates
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="p-6">
+                <!-- Dashboard Tab -->
+                <div id="content-dashboard" class="tab-content">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Elections List -->
+                        <div class="bg-gray-50 rounded-lg p-6">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                                <i class="fas fa-poll mr-2"></i>Recent Elections
+                            </h3>
+                            <div id="elections-list" class="space-y-3">
+                                <!-- Elections will be loaded here -->
+                            </div>
+                        </div>
+
+                        <!-- Vote Statistics -->
+                        <div class="bg-gray-50 rounded-lg p-6">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                                <i class="fas fa-chart-pie mr-2"></i>Vote Statistics
+                            </h3>
+                            <div id="vote-stats" class="space-y-3">
+                                <!-- Vote stats will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Elections Tab -->
+                <div id="content-elections" class="tab-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            <i class="fas fa-poll mr-2"></i>Election Management
+                        </h3>
+                        <button onclick="showCreateElectionModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Create Election
+                        </button>
+                    </div>
+                    <div id="elections-table" class="overflow-x-auto">
+                        <!-- Elections table will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Votes Tab -->
+                <div id="content-votes" class="tab-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            <i class="fas fa-vote-yea mr-2"></i>Vote Monitoring
+                        </h3>
+                        <button onclick="refreshVotes()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh Votes
+                        </button>
+                    </div>
+                    <div id="votes-table" class="overflow-x-auto">
+                        <!-- Votes table will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Candidates Tab -->
+                <div id="content-candidates" class="tab-content hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            <i class="fas fa-users mr-2"></i>Candidate Management
+                        </h3>
+                        <button onclick="showAddCandidateModal()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Add Candidate
+                        </button>
+                    </div>
+                    <div id="candidates-table" class="overflow-x-auto">
+                        <!-- Candidates table will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Election Modal -->
+    <div id="create-election-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Create New Election</h3>
+                </div>
+                <form id="create-election-form" class="p-6">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                        <input type="text" id="election-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea id="election-description" required rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Duration (Hours)</label>
+                        <input type="number" id="election-duration" min="1" max="168" value="24" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="hideCreateElectionModal()" class="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Create Election
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Candidate Modal -->
+    <div id="add-candidate-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Add Candidate</h3>
+                </div>
+                <form id="add-candidate-form" class="p-6">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Election</label>
+                        <select id="candidate-election" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Select an election</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Candidate Name</label>
+                        <input type="text" id="candidate-name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea id="candidate-description" required rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="hideAddCandidateModal()" class="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                            Add Candidate
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="bg-white rounded-lg shadow-xl p-6">
+                <div class="flex items-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+                    <span class="text-gray-700">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
+
+
