@@ -39,10 +39,13 @@ const adminService = new AdminService();
 app.get('/api/admin/health', async (req, res) => {
   const backendStatus = await adminService.isBackendConnected();
   res.json({
-    status: 'OK',
-    message: 'Civix Admin Panel API is running',
-    timestamp: new Date().toISOString(),
-    backend: backendStatus
+    success: true,
+    data: {
+      status: 'OK',
+      message: 'Civix Admin Panel API is running',
+      timestamp: new Date().toISOString(),
+      backend: backendStatus
+    }
   });
 });
 
@@ -60,6 +63,52 @@ app.get('/api/admin/dashboard', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Toggle election active status (proxies to backend admin)
+app.patch('/api/admin/elections/:id/toggle', async (req, res) => {
+  try {
+    const electionId = parseInt(req.params.id);
+    const result = await adminService.toggleElectionStatus(electionId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Toggle election error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update candidate (UI-level override only)
+app.patch('/api/admin/elections/:id/candidates/:candidateId', async (req, res) => {
+  try {
+    const electionId = parseInt(req.params.id);
+    const candidateId = parseInt(req.params.candidateId);
+    const { name, description } = req.body || {};
+    if (!name && !description) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+    const result = await adminService.updateCandidateUi(electionId, candidateId, { name, description });
+    // Broadcast update
+    broadcastCandidateUpdate({ type: 'update', electionId, candidateId, name, description });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Update candidate (UI) error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Remove candidate (UI-level soft delete only)
+app.delete('/api/admin/elections/:id/candidates/:candidateId', async (req, res) => {
+  try {
+    const electionId = parseInt(req.params.id);
+    const candidateId = parseInt(req.params.candidateId);
+    const result = await adminService.removeCandidateUi(electionId, candidateId);
+    // Broadcast removal
+    broadcastCandidateUpdate({ type: 'remove', electionId, candidateId });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Remove candidate (UI) error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -201,6 +250,92 @@ app.get('/api/admin/votes', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Realtime voting via Server-Sent Events (SSE)
+const sseClients = new Set();
+// Realtime candidate updates via SSE
+const sseCandidateClients = new Set();
+
+function broadcastVote(vote) {
+  const data = `data: ${JSON.stringify(vote)}\n\n`;
+  for (const client of sseClients) {
+    client.write(data);
+  }
+}
+
+function broadcastCandidateUpdate(update) {
+  const data = `data: ${JSON.stringify(update)}\n\n`;
+  for (const client of sseCandidateClients) {
+    client.write(data);
+  }
+}
+
+app.get('/api/admin/vote-stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Initial connection confirmation
+  res.write(': connected\n\n');
+
+  // Add client
+  sseClients.add(res);
+
+  // Remove on close
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
+
+// Candidate updates SSE stream
+app.get('/api/admin/candidate-stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Initial connection confirmation
+  res.write(': connected\n\n');
+
+  // Add client
+  sseCandidateClients.add(res);
+
+  // Remove on close
+  req.on('close', () => {
+    sseCandidateClients.delete(res);
+  });
+});
+
+// Endpoint to receive vote notifications (from frontend) and broadcast
+app.post('/api/admin/notify-vote', async (req, res) => {
+  try {
+    const { electionId, electionTitle, candidateId, candidateName, timestamp, transactionHash, blockNumber, isHighlighted } = req.body || {};
+    if (!electionId || !candidateId) {
+      return res.status(400).json({ success: false, error: 'electionId and candidateId are required' });
+    }
+
+    const vote = {
+      electionId,
+      electionTitle: electionTitle || 'Mock Election 2023',
+      candidateId,
+      candidateName: candidateName || 'Unknown Candidate',
+      timestamp: timestamp || new Date().toISOString(),
+      transactionHash: transactionHash || null,
+      blockNumber: typeof blockNumber === 'number' ? blockNumber : null,
+      isHighlighted: Boolean(isHighlighted)
+    };
+
+    if (adminService.addMockVote) {
+      await adminService.addMockVote(vote);
+    }
+
+    broadcastVote(vote);
+
+    res.json({ success: true, data: vote });
+  } catch (error) {
+    console.error('Notify vote error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

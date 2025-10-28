@@ -36,15 +36,29 @@ export interface ElectionResults {
   totalVotes: number;
 }
 
+// Raw response from the cast vote API endpoint
+interface CastVoteApiResponse {
+  success: boolean;
+  data?: { transactionHash: string; blockNumber: number };
+  error?: string;
+  message?: string;
+}
+
 // Election API functions
 export const electionApi = {
   // Get all elections
   async getElections(): Promise<Election[]> {
     try {
-      const response = await api.get<{ success: boolean; data: Election[] }>(
+      const response = await api.get<{ success: boolean; data: any[] }>(
         '/elections'
       );
-      return response.data || [];
+      const items = response.data || [];
+      const normalized: Election[] = items.map((e: any) => ({
+        ...e,
+        startTime: typeof e.startTime === 'string' ? Math.floor(new Date(e.startTime).getTime() / 1000) : e.startTime,
+        endTime: typeof e.endTime === 'string' ? Math.floor(new Date(e.endTime).getTime() / 1000) : e.endTime,
+      }));
+      return normalized;
     } catch (error) {
       console.error('Failed to fetch elections:', error);
       throw error;
@@ -54,13 +68,19 @@ export const electionApi = {
   // Get a specific election
   async getElection(electionId: number): Promise<Election> {
     try {
-      const response = await api.get<{ success: boolean; data: Election }>(
+      const response = await api.get<{ success: boolean; data: any }>(
         `/elections/${electionId}`
       );
       if (!response.success) {
         throw new Error('Failed to fetch election');
       }
-      return response.data;
+      const e = response.data;
+      const normalized: Election = {
+        ...e,
+        startTime: typeof e.startTime === 'string' ? Math.floor(new Date(e.startTime).getTime() / 1000) : e.startTime,
+        endTime: typeof e.endTime === 'string' ? Math.floor(new Date(e.endTime).getTime() / 1000) : e.endTime,
+      };
+      return normalized;
     } catch (error) {
       console.error('Failed to fetch election:', error);
       throw error;
@@ -90,15 +110,27 @@ export const electionApi = {
     voterIdHash: string
   ): Promise<VoteResponse> {
     try {
-      const response = await api.post<VoteResponse>('/votes/cast', {
-        electionId,
-        candidateId,
-        voterIdHash,
-      });
-      return response;
-    } catch (error) {
-      console.error('Failed to cast vote:', error);
-      throw error;
+      const payload = { electionId, candidateId, voterIdHash };
+      const response = await api.post<CastVoteApiResponse>(
+        '/votes',
+        payload
+      );
+      if (!response.success) {
+        return {
+          success: false,
+          error: response.error || 'Failed to cast vote',
+        };
+      }
+      return {
+        success: true,
+        transactionHash: response.data?.transactionHash,
+        blockNumber: response.data?.blockNumber,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to cast vote',
+      };
     }
   },
 
@@ -141,13 +173,13 @@ export const electionApi = {
     try {
       const elections = await this.getElections();
       if (!elections || elections.length === 0) {
-        return null; // No elections found
+        return null;
       }
-      const currentElection = elections[0];
-      const candidates = await this.getCandidates(currentElection.id);
-      return { election: currentElection, candidates };
+      const active = elections.filter((e) => isElectionActive(e));
+      const current = active.length > 0 ? active[0] : elections[0];
+      const candidates = await this.getCandidates(current.id);
+      return { election: current, candidates };
     } catch (error) {
-      console.error('Failed to fetch current election:', error);
       throw error;
     }
   },

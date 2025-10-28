@@ -3,6 +3,7 @@ let currentTab = 'dashboard';
 let electionsData = [];
 let votesData = [];
 let candidatesData = [];
+let editContext = { electionId: null, candidateId: null };
 
 // API Base URL
 const API_BASE_URL = '/api/admin';
@@ -10,6 +11,57 @@ const API_BASE_URL = '/api/admin';
 // Utility functions
 function showLoading() {
     document.getElementById('loading-overlay').classList.remove('hidden');
+}
+
+// Edit Candidate Modal logic
+function showEditCandidateModal() {
+    document.getElementById('edit-candidate-modal').classList.remove('hidden');
+}
+
+function hideEditCandidateModal() {
+    document.getElementById('edit-candidate-modal').classList.add('hidden');
+    document.getElementById('edit-candidate-form').reset();
+    editContext = { electionId: null, candidateId: null };
+}
+
+function openEditCandidate(electionId, candidateId) {
+    const candidate = candidatesData.find(c => c.electionId === electionId && c.id === candidateId);
+    if (!candidate) {
+        showNotification('Candidate not found', 'error');
+        return;
+    }
+    editContext = { electionId, candidateId };
+    document.getElementById('edit-candidate-name').value = candidate.name || '';
+    document.getElementById('edit-candidate-description').value = candidate.description || '';
+    showEditCandidateModal();
+}
+
+var __editForm = document.getElementById('edit-candidate-form');
+if (__editForm) {
+    __editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const name = (document.getElementById('edit-candidate-name').value || '').trim();
+            const description = (document.getElementById('edit-candidate-description').value || '').trim();
+            if (!editContext.electionId || !editContext.candidateId) throw new Error('Missing edit context');
+            showLoading();
+            const res = await fetch(`${API_BASE_URL}/elections/${editContext.electionId}/candidates/${editContext.candidateId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to update candidate');
+            showNotification('Candidate updated', 'success');
+            hideEditCandidateModal();
+            await loadCandidatesData();
+            await loadDashboardData();
+        } catch (err) {
+            showNotification('Update failed: ' + (err && err.message ? err.message : String(err)), 'error');
+        } finally {
+            hideLoading();
+        }
+    });
 }
 
 function hideLoading() {
@@ -281,12 +333,15 @@ function renderElectionsTable() {
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             ${election.candidateCount || 0}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button onclick="viewElectionDetails(${election.id})" class="text-blue-600 hover:text-blue-900 mr-3">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                            <button onclick="viewElectionDetails(${election.id})" class="text-blue-600 hover:text-blue-900">
                                 <i class="fas fa-eye"></i>
                             </button>
                             <button onclick="viewElectionResults(${election.id})" class="text-green-600 hover:text-green-900">
                                 <i class="fas fa-chart-bar"></i>
+                            </button>
+                            <button onclick="toggleElectionStatus(${election.id})" class="text-yellow-600 hover:text-yellow-800">
+                                <i class="fas fa-toggle-on"></i>
                             </button>
                         </td>
                     </tr>
@@ -324,19 +379,28 @@ function renderVotesTable() {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Election</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Candidate</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Block</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 ${votesData.map(vote => `
-                    <tr>
+                    <tr ${vote.isHighlighted ? 'class="bg-green-50"' : ''}>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="text-sm font-medium text-gray-900">${vote.electionTitle}</div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="text-sm text-gray-900">${vote.candidateName}</div>
+                            ${vote.isHighlighted ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">Your Vote</span>' : ''}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             ${new Date(vote.timestamp).toLocaleString()}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${vote.transactionHash ? `<span class="font-mono text-xs">${vote.transactionHash.substring(0, 10)}...</span>` : 'N/A'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            ${(vote.blockNumber !== null && vote.blockNumber !== undefined) ? vote.blockNumber : '—'}
                         </td>
                     </tr>
                 `).join('')}
@@ -393,6 +457,7 @@ function renderCandidatesTable() {
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Election</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Votes</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -410,11 +475,82 @@ function renderCandidatesTable() {
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             ${candidate.voteCount || 0}
                         </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                            <button onclick="openEditCandidate(${candidate.electionId}, ${candidate.id})" class="text-blue-600 hover:text-blue-900">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="removeCandidate(${candidate.electionId}, ${candidate.id})" class="text-red-600 hover:text-red-900">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
                     </tr>
                 `).join('')}
             </tbody>
         </table>
     `;
+}
+
+// Admin actions
+async function toggleElectionStatus(electionId) {
+    try {
+        showLoading();
+        const res = await fetch(`${API_BASE_URL}/elections/${electionId}/toggle`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to toggle');
+        showNotification('Election status toggled', 'success');
+        await loadElectionsData();
+        await loadDashboardData();
+    } catch (err) {
+        showNotification(`Toggle failed: ${err.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function editCandidate(electionId, candidateId, currentName, currentDescription) {
+    try {
+        const name = prompt('Edit candidate name:', currentName);
+        if (name === null) return;
+        const description = prompt('Edit candidate description:', currentDescription || '');
+        if (description === null) return;
+        showLoading();
+        const res = await fetch(`${API_BASE_URL}/elections/${electionId}/candidates/${candidateId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to update candidate');
+        showNotification('Candidate updated', 'success');
+        await loadCandidatesData();
+        await loadDashboardData();
+    } catch (err) {
+        showNotification(`Update failed: ${err.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function removeCandidate(electionId, candidateId) {
+    try {
+        if (!confirm('Remove this candidate from the Admin Panel view? This does not change the blockchain.')) return;
+        showLoading();
+        const res = await fetch(`${API_BASE_URL}/elections/${electionId}/candidates/${candidateId}`, {
+            method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to remove candidate');
+        showNotification('Candidate removed (UI only)', 'success');
+        await loadCandidatesData();
+        await loadDashboardData();
+    } catch (err) {
+        showNotification(`Remove failed: ${err.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
 // Modal functions
@@ -543,6 +679,9 @@ function viewElectionResults(electionId) {
 document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
     loadDashboardData();
+
+    // Start realtime vote stream
+    initVoteStream();
     
     // Set up periodic refresh for blockchain status
     setInterval(async () => {
@@ -553,5 +692,47 @@ document.addEventListener('DOMContentLoaded', () => {
             updateBlockchainStatus({ connected: false });
         }
     }, 30000); // Check every 30 seconds
+
+    // Ensure tab navigation works even if inline onclick is blocked by CSP
+    const tabs = ['dashboard', 'elections', 'votes', 'candidates'];
+    tabs.forEach((name) => {
+        const btn = document.getElementById(`tab-${name}`);
+        if (btn) {
+            btn.addEventListener('click', () => showTab(name));
+        }
+    });
 });
+
+// Realtime updates via Server-Sent Events (SSE)
+function initVoteStream() {
+    try {
+        const eventSource = new EventSource('/api/admin/vote-stream');
+
+        eventSource.onmessage = (event) => {
+            // Heartbeat or comments are ignored
+            if (!event.data || event.data === ': connected') return;
+            try {
+                const vote = JSON.parse(event.data);
+                // Update local votes cache
+                votesData.unshift(vote);
+                // Re-render votes table
+                renderVotesTable();
+                // Optionally refresh dashboard stats
+                loadDashboardData();
+                // Show toast
+                showNotification(`New vote for ${vote.candidateName}${vote.transactionHash ? ` (tx ${vote.transactionHash.substring(0,10)}...)` : ''}`, 'success');
+            } catch (e) {
+                console.error('Failed to parse SSE vote event', e);
+            }
+        };
+
+        eventSource.onerror = () => {
+            console.warn('SSE connection error. Reconnecting in 5s...');
+            eventSource.close();
+            setTimeout(initVoteStream, 5000);
+        };
+    } catch (err) {
+        console.error('Failed to initialize vote stream:', err);
+    }
+}
 

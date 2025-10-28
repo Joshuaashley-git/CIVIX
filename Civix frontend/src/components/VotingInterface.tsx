@@ -47,6 +47,29 @@ const VotingInterface = () => {
     fetchElectionData();
   }, [toast]);
 
+  useEffect(() => {
+    if (!election) return;
+    const ADMIN_API_BASE = (import.meta as any).env?.VITE_ADMIN_URL || 'http://localhost:3001';
+    const es = new EventSource(`${ADMIN_API_BASE}/api/admin/candidate-stream`);
+    es.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (!msg || msg.electionId !== election.id) return;
+        if (msg.type === 'update') {
+          setCandidates((prev) => prev.map((c) => c.id === Number(msg.candidateId) ? { ...c, name: msg.name ?? c.name, description: msg.description ?? c.description } : c));
+        } else if (msg.type === 'remove') {
+          setCandidates((prev) => prev.filter((c) => c.id !== Number(msg.candidateId)));
+        }
+      } catch {}
+    };
+    es.onerror = () => {
+      es.close();
+    };
+    return () => {
+      es.close();
+    };
+  }, [election?.id]);
+
   const handleVote = async () => {
     if (!selectedCandidate || !election) return;
 
@@ -56,6 +79,12 @@ const VotingInterface = () => {
       // Generate a voter ID hash (in production, this would be based on authenticated user)
       const voterId = `voter_${Date.now()}`; // Temporary demo voter ID
       const voterIdHash = generateVoterIdHash(voterId);
+      
+      console.log("Submitting vote with data:", {
+        electionId: election.id,
+        candidateId: parseInt(selectedCandidate),
+        voterIdHash
+      });
       
       const response = await electionApi.castVote(
         election.id,
@@ -68,11 +97,35 @@ const VotingInterface = () => {
           title: "Vote Cast Successfully!",
           description: `Transaction: ${response.transactionHash?.slice(0, 10)}...`,
         });
-        
+        // Notify Admin Panel for realtime updates
+        try {
+          const selected = candidates.find(c => c.id === parseInt(selectedCandidate));
+          await fetch('http://localhost:3001/api/admin/notify-vote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              electionId: election.id,
+              electionTitle: election.title,
+              candidateId: parseInt(selectedCandidate),
+              candidateName: selected?.name,
+              timestamp: new Date().toISOString(),
+              transactionHash: response.transactionHash,
+              blockNumber: response.blockNumber,
+              isHighlighted: true,
+            })
+          });
+        } catch (notifyErr) {
+          console.error('Failed to notify admin panel:', notifyErr);
+        }
+
         // Redirect to confirmation page
         window.location.href = '/confirmation';
       } else {
-        throw new Error(response.error || 'Failed to cast vote');
+        toast({
+          title: "Voting Failed",
+          description: response.error || "Failed to cast vote. Please try again.",
+          variant: "destructive",
+        });
       }
     } catch (err: any) {
       console.error('Failed to cast vote:', err);

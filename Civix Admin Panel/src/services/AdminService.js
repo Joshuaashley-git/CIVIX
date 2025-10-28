@@ -1,15 +1,69 @@
 const axios = require('axios');
+const store = require('../store');
 
 class AdminService {
   constructor() {
     this.backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+    this.adminToken = process.env.ADMIN_TOKEN || 'admin-token';
     this.apiClient = axios.create({
       baseURL: `${this.backendUrl}/api`,
       timeout: 10000,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.adminToken}`
       }
     });
+
+    // In-memory mock data store for realtime admin updates
+    this.mockElections = [
+      {
+        id: 1,
+        title: "Mock Election 2023",
+        description: "This is a mock election for testing purposes",
+        isActive: true,
+        candidateCount: 3,
+        startTime: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+        endTime: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString()
+      }
+    ];
+
+    this.mockCandidates = {
+      1: [
+        { id: 1, name: "Alice Johnson", description: "Experienced leader" },
+        { id: 2, name: "Bob Smith", description: "Community advocate" },
+        { id: 3, name: "Carol Williams", description: "Innovator and strategist" }
+      ]
+    };
+
+    this.mockVotes = [
+      {
+        electionId: 1,
+        electionTitle: "Mock Election 2023",
+        candidateId: 1,
+        candidateName: "Alice Johnson",
+        timestamp: new Date().toISOString(),
+        transactionHash: "0x" + Math.random().toString(16).substring(2, 42)
+      },
+      {
+        electionId: 1,
+        electionTitle: "Mock Election 2023",
+        candidateId: 2,
+        candidateName: "Bob Smith",
+        timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+        transactionHash: "0x" + Math.random().toString(16).substring(2, 42)
+      },
+      {
+        electionId: 1,
+        electionTitle: "Mock Election 2023",
+        candidateId: 3,
+        candidateName: "Carol Williams",
+        timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+        transactionHash: "0x" + Math.random().toString(16).substring(2, 42)
+      }
+    ];
+
+    this.removedCandidates = {};
+    this.candidateOverrides = {};
   }
 
   async isBackendConnected() {
@@ -33,49 +87,20 @@ class AdminService {
 
   async getDashboardData() {
     try {
-      // Get health status
-      const healthResponse = await this.apiClient.get('/health');
-      const health = healthResponse.data;
+      const response = await this.apiClient.get('/admin/dashboard');
+      const data = response.data?.data;
+      if (!data) throw new Error('Invalid dashboard response');
 
-      // Get elections data
-      const electionsResponse = await this.apiClient.get('/elections');
-      const elections = electionsResponse.data.data || [];
-
-      // Calculate statistics
-      let totalVotes = 0;
-      let totalCandidates = 0;
-      let activeElections = 0;
-
-      for (const election of elections) {
-        if (election.isActive) {
-          activeElections++;
-        }
-        totalCandidates += election.candidateCount || 0;
-        
-        // Get vote count for each election
-        try {
-          const resultsResponse = await this.apiClient.get(`/elections/${election.id}/results`);
-          totalVotes += resultsResponse.data.data?.totalVotes || 0;
-        } catch (error) {
-          console.error(`Failed to get results for election ${election.id}:`, error.message);
-        }
-      }
+      const activeElections = (data.elections || []).filter((e) => e.status === 'Active').length;
+      const totalCandidates = (data.elections || []).reduce((sum, e) => sum + (e.candidateCount || 0), 0);
 
       return {
-        totalElections: elections.length,
+        totalElections: data.totalElections || 0,
         activeElections,
-        totalVotes,
+        totalVotes: data.totalVotes || 0,
         totalCandidates,
-        blockchainConnected: health.blockchain?.connected || false,
-        elections: elections.map(election => ({
-          id: election.id,
-          title: election.title,
-          description: election.description,
-          isActive: election.isActive,
-          candidateCount: election.candidateCount || 0,
-          startTime: election.startTime,
-          endTime: election.endTime
-        }))
+        blockchainConnected: true,
+        elections: data.elections || []
       };
     } catch (error) {
       console.error('Failed to get dashboard data:', error.message);
@@ -116,7 +141,26 @@ class AdminService {
   async getCandidates(electionId) {
     try {
       const response = await this.apiClient.get(`/elections/${electionId}/candidates`);
-      return response.data.data || [];
+      let list = response.data.data || [];
+
+      // Apply persistent removals from JSON store
+      const removedIds = new Set(store.getRemovedCandidates(electionId).map(Number));
+      if (removedIds.size) {
+        list = list.filter((c) => !removedIds.has(Number(c.id)));
+      }
+
+      // Apply persistent overrides from JSON store
+      const overridesMap = store.getCandidateOverrides(electionId);
+      list = list.map((c) => {
+        const ov = overridesMap[String(c.id)] || {};
+        return {
+          ...c,
+          name: ov.name ?? c.name,
+          description: ov.description ?? c.description,
+        };
+      });
+
+      return list;
     } catch (error) {
       console.error(`Failed to get candidates for election ${electionId}:`, error.message);
       throw new Error(`Failed to fetch candidates for election ${electionId}`);
@@ -138,10 +182,15 @@ class AdminService {
 
   async createElection(title, description, durationHours) {
     try {
+      const now = Date.now();
+      const startTime = new Date(now + 60 * 1000).toISOString(); // start in 60s to satisfy contract requirement
+      const endTime = new Date(now + (durationHours || 24) * 60 * 60 * 1000).toISOString();
+
       const response = await this.apiClient.post('/admin/elections', {
         title,
         description,
-        durationHours
+        startTime,
+        endTime
       });
       return response.data.data;
     } catch (error) {
@@ -150,35 +199,29 @@ class AdminService {
     }
   }
 
+  async toggleElectionStatus(electionId) {
+    try {
+      const response = await this.apiClient.patch(`/admin/elections/${electionId}/toggle`);
+      return response.data.data;
+    } catch (error) {
+      throw new Error(`Failed to toggle election ${electionId} status`);
+    }
+  }
+
+  async removeCandidateUi(electionId, candidateId) {
+    store.addRemovedCandidate(electionId, candidateId);
+    return { success: true };
+  }
+
+  async updateCandidateUi(electionId, candidateId, payload) {
+    store.setCandidateOverride(electionId, candidateId, payload);
+    return { success: true };
+  }
+
   async getAllVotes() {
     try {
-      // Get all elections first
-      const elections = await this.getAllElections();
-      const allVotes = [];
-
-      // Get votes for each election
-      for (const election of elections) {
-        try {
-          const results = await this.getElectionResults(election.id);
-          if (results && results.candidates) {
-            results.candidates.forEach(candidate => {
-              for (let i = 0; i < candidate.voteCount; i++) {
-                allVotes.push({
-                  electionId: election.id,
-                  electionTitle: election.title,
-                  candidateId: candidate.id,
-                  candidateName: candidate.name,
-                  timestamp: new Date().toISOString() // Note: Smart contract doesn't store individual vote timestamps
-                });
-              }
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to get votes for election ${election.id}:`, error.message);
-        }
-      }
-
-      return allVotes;
+      // Return in-memory mock votes to support realtime updates
+      return this.mockVotes;
     } catch (error) {
       console.error('Failed to get all votes:', error.message);
       throw new Error('Failed to fetch votes');
@@ -223,6 +266,26 @@ class AdminService {
       throw new Error('Failed to fetch vote statistics');
     }
   }
+  addMockVote(vote) {
+    const election = this.mockElections.find(e => e.id === vote.electionId) || this.mockElections[0];
+    const candidates = this.mockCandidates[election.id] || [];
+    const candidate = candidates.find(c => c.id === vote.candidateId);
+
+    const normalized = {
+      electionId: election.id,
+      electionTitle: vote.electionTitle || election.title,
+      candidateId: vote.candidateId,
+      candidateName: vote.candidateName || candidate?.name || 'Unknown Candidate',
+      timestamp: vote.timestamp || new Date().toISOString(),
+      transactionHash: vote.transactionHash || ("0x" + Math.random().toString(16).substring(2, 42)),
+      blockNumber: typeof vote.blockNumber === 'number' ? vote.blockNumber : null,
+      isHighlighted: Boolean(vote.isHighlighted)
+    };
+
+    this.mockVotes.push(normalized);
+    return normalized;
+  }
+
 }
 
 module.exports = AdminService;

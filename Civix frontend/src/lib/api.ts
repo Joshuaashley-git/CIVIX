@@ -17,13 +17,11 @@ export const api = {
     };
 
     const response = await fetch(url, config);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    const data = await response.json();
+    
+    // Return the data even for error responses, so we can handle them in the calling code
+    // This allows us to access error messages from the API
+    return data;
   },
 
   // GET request

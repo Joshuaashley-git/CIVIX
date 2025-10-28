@@ -8,6 +8,10 @@ router.get('/', async (req, res) => {
     const electionCountResult = await blockchainService.getElectionCount();
     
     if (!electionCountResult.success) {
+      // If the count is 0, return an empty array
+      if (electionCountResult.error.includes("could not decode result data")) {
+        return res.json({ success: true, data: [] });
+      }
       return res.status(500).json({ error: electionCountResult.error });
     }
 

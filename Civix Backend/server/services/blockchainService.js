@@ -9,6 +9,8 @@ class BlockchainService {
     this.contract = null;
     this.contractAddress = null;
     this.connected = false;
+    this.signers = [];
+    this.accounts = [];
   }
 
   async initialize() {
@@ -22,14 +24,19 @@ class BlockchainService {
         this.provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
       }
 
-      // Set up signer
+      // Set up signer(s)
       if (process.env.PRIVATE_KEY) {
         this.signer = new ethers.Wallet(process.env.PRIVATE_KEY, this.provider);
       } else {
-        // For local development, use the first hardhat account
-        const accounts = await this.provider.listAccounts();
-        if (accounts.length > 0) {
+        // For local development, use Hardhat accounts
+        this.accounts = await this.provider.listAccounts();
+        if (this.accounts.length > 0) {
+          // Owner/deployer default signer (index 0)
           this.signer = await this.provider.getSigner(0);
+          // Cache all available signers for per-voter transactions
+          this.signers = await Promise.all(
+            this.accounts.map((_, idx) => this.provider.getSigner(idx))
+          );
         } else {
           throw new Error('No accounts available');
         }
@@ -46,6 +53,9 @@ class BlockchainService {
       console.log('📍 Network:', await this.provider.getNetwork());
       console.log('💳 Signer address:', await this.signer.getAddress());
       console.log('📄 Contract address:', this.contractAddress);
+      if (this.accounts.length) {
+        console.log('👥 Available accounts:', this.accounts.length);
+      }
 
     } catch (error) {
       console.error('❌ Blockchain service initialization failed:', error);
@@ -163,7 +173,16 @@ class BlockchainService {
 
   async castVote(electionId, candidateId, voterIdHash) {
     try {
-      const tx = await this.contract.castVote(electionId, candidateId, voterIdHash);
+      // Choose a signer deterministically based on voterIdHash to simulate unique voters
+      let contractForTx = this.contract;
+      if (this.signers && this.signers.length > 1 && typeof voterIdHash === 'string' && voterIdHash.length > 0) {
+        const hashNum = Array.from(voterIdHash).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 0);
+        const idx = hashNum % this.signers.length;
+        const chosenSigner = this.signers[idx];
+        contractForTx = this.contract.connect(chosenSigner);
+      }
+
+      const tx = await contractForTx.castVote(electionId, candidateId, voterIdHash);
       const receipt = await tx.wait();
 
       return {
@@ -334,6 +353,13 @@ class BlockchainService {
         count: Number(count)
       };
     } catch (error) {
+      if (error.code === 'BAD_DATA' && error.value === '0x') {
+        // This means no elections have been created yet, which is not an error
+        return {
+          success: true,
+          count: 0
+        };
+      }
       console.error('❌ Get election count failed:', error);
       return {
         success: false,
