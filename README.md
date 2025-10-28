@@ -1,6 +1,58 @@
-# 🗳️ Civix Blockchain Backend
+# 🗳️ Civix – Full Stack (Backend, Admin Panel, Frontend)
 
-A secure, blockchain-based voting system backend built with Ethereum smart contracts and Node.js.
+A blockchain voting system consisting of:
+- Backend API (Express) for smart contract integration
+- Admin Panel (Express + static UI) for election/candidate management and live votes
+- Frontend (Vite + React) for voters
+
+## Quick Start (Full Stack)
+
+Prerequisites
+- Node.js 18+ and npm
+- Free ports: 8545, 5001, 3001, 8080
+
+1) Terminal A — Hardhat blockchain
+```
+cd "Civix Backend"
+npx hardhat node
+```
+
+2) Terminal B — Deploy contract to localhost
+```
+cd "Civix Backend"
+npx hardhat run scripts/deploy.js --network localhost
+```
+
+3) Terminal C — Backend API (port 5001)
+```
+cd "Civix Backend"
+npm run dev
+```
+
+4) Terminal D — Admin Panel (port 3001)
+```
+cd "Civix Admin Panel"
+npm start
+```
+
+5) Terminal E — Frontend (port 8080)
+```
+cd "Civix frontend"
+npm run dev
+```
+
+Open
+- Admin Panel: http://localhost:3001
+- Frontend: http://localhost:8080
+- Backend Health: http://localhost:5001/api/health
+
+Realtime
+- Votes stream to Admin Panel via SSE: /api/admin/vote-stream
+- Candidate edits/removals stream to Frontend via SSE: /api/admin/candidate-stream
+
+Persistence
+- UI-level candidate edits/removals persist in file: Civix Admin Panel/data/admin-store.json
+- Override via env var `DB_PATH` if desired
 
 ## Features
 
