@@ -48,6 +48,8 @@ contract CivixVoting is Ownable, ReentrancyGuard, Pausable {
     // Events
     event ElectionCreated(uint256 indexed electionId, string title, uint256 startTime, uint256 endTime);
     event CandidateAdded(uint256 indexed electionId, uint256 indexed candidateId, string name);
+    event CandidateUpdated(uint256 indexed electionId, uint256 indexed candidateId, string name, string description);
+    event CandidateStatusChanged(uint256 indexed electionId, uint256 indexed candidateId, bool isActive);
     event VoteCasted(uint256 indexed electionId, uint256 indexed candidateId, address indexed voter, uint256 timestamp);
     event ElectionStatusChanged(uint256 indexed electionId, bool isActive);
     
@@ -66,7 +68,6 @@ contract CivixVoting is Ownable, ReentrancyGuard, Pausable {
     
     modifier candidateExists(uint256 _electionId, uint256 _candidateId) {
         require(_candidateId > 0 && _candidateId <= elections[_electionId].candidateCount, "Candidate does not exist");
-        require(elections[_electionId].candidates[_candidateId].isActive, "Candidate is not active");
         _;
     }
     
@@ -149,6 +150,7 @@ contract CivixVoting is Ownable, ReentrancyGuard, Pausable {
         hasNotVoted(_electionId) 
     {
         require(!usedVoterIds[_voterIdHash], "This voter ID has already been used");
+        require(elections[_electionId].candidates[_candidateId].isActive, "Candidate is not active");
         
         // Mark voter ID as used
         usedVoterIds[_voterIdHash] = true;
@@ -166,6 +168,38 @@ contract CivixVoting is Ownable, ReentrancyGuard, Pausable {
         elections[_electionId].totalVotes++;
         
         emit VoteCasted(_electionId, _candidateId, msg.sender, block.timestamp);
+    }
+
+    /**
+     * @dev Update candidate name and description (only owner)
+     */
+    function updateCandidate(
+        uint256 _electionId,
+        uint256 _candidateId,
+        string memory _name,
+        string memory _description
+    ) external onlyOwner electionExists(_electionId) candidateExists(_electionId, _candidateId) {
+        require(bytes(_name).length > 0 || bytes(_description).length > 0, "No fields to update");
+        Candidate storage candidate = elections[_electionId].candidates[_candidateId];
+        if (bytes(_name).length > 0) {
+            candidate.name = _name;
+        }
+        if (bytes(_description).length > 0) {
+            candidate.description = _description;
+        }
+        emit CandidateUpdated(_electionId, _candidateId, candidate.name, candidate.description);
+    }
+
+    /**
+     * @dev Enable/disable a candidate (only owner)
+     */
+    function setCandidateActive(
+        uint256 _electionId,
+        uint256 _candidateId,
+        bool _isActive
+    ) external onlyOwner electionExists(_electionId) candidateExists(_electionId, _candidateId) {
+        elections[_electionId].candidates[_candidateId].isActive = _isActive;
+        emit CandidateStatusChanged(_electionId, _candidateId, _isActive);
     }
     
     /**

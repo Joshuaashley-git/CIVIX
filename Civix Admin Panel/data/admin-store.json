@@ -1,4 +1,22 @@
 {
-  "candidate_overrides": {},
+  "candidate_overrides": {
+    "1": {
+      "1": {
+        "name": "doe",
+        "description": "Democratic candidate",
+        "updatedAt": "2025-10-29T19:55:57.727Z"
+      },
+      "2": {
+        "name": "Jane",
+        "description": "Republican candidate with focus on economy and security",
+        "updatedAt": "2025-10-29T19:55:19.513Z"
+      },
+      "3": {
+        "name": "Bob",
+        "description": "Independent candidate with focus on environment and technology",
+        "updatedAt": "2025-10-29T19:55:28.922Z"
+      }
+    }
+  },
   "removed_candidates": {}
 }

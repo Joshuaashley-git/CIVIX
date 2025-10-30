@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useGlobalCountdown } from "@/lib/CountdownContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Globe, HelpCircle, Scan, Fingerprint, Eye, CheckCircle, Upload } from "lucide-react";
 
 const IDVerification = () => {
-  const [timeRemaining, setTimeRemaining] = useState("02:00");
+  const navigate = useNavigate();
+  const { formatted } = useGlobalCountdown();
   const [idScanned, setIdScanned] = useState(false);
   const [biometricScanned, setBiometricScanned] = useState(false);
 
@@ -17,7 +20,7 @@ const IDVerification = () => {
           <h1 className="text-2xl font-bold text-primary">Civix</h1>
           <div className="flex items-center gap-2 text-accent font-semibold">
             <Clock className="w-4 h-4" />
-            <span className="text-lg">{timeRemaining}</span>
+            <span className="text-lg">{formatted}</span>
           </div>
         </div>
         
@@ -210,7 +213,7 @@ const IDVerification = () => {
             size="lg" 
             disabled={!idScanned || !biometricScanned}
             className="w-full max-w-md h-14 text-base font-semibold bg-gradient-accent hover:shadow-lg hover:scale-105 transition-all duration-300 group disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => idScanned && biometricScanned && (window.location.href = '/vote')}
+            onClick={() => idScanned && biometricScanned && navigate('/vote')}
           >
             <span className="flex items-center gap-2">
               Verify!

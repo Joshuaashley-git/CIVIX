@@ -13,6 +13,42 @@ class BlockchainService {
     this.accounts = [];
   }
 
+  async updateCandidate(electionId, candidateId, name, description) {
+    try {
+      const tx = await this.contract.updateCandidate(electionId, candidateId, name || "", description || "");
+      const receipt = await tx.wait();
+      return {
+        success: true,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber,
+      };
+    } catch (error) {
+      console.error('❌ Update candidate failed:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  async setCandidateActive(electionId, candidateId, isActive) {
+    try {
+      const tx = await this.contract.setCandidateActive(electionId, candidateId, Boolean(isActive));
+      const receipt = await tx.wait();
+      return {
+        success: true,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber,
+      };
+    } catch (error) {
+      console.error('❌ Set candidate active failed:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
   async initialize() {
     try {
       // Set up provider

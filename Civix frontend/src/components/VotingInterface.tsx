@@ -1,11 +1,28 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Globe, HelpCircle, ChevronRight, Loader2, AlertCircle } from "lucide-react";
-import { electionApi, type Candidate, type Election, generateVoterIdHash } from "@/lib/election-api";
+import { electionApi, generateVoterIdHash } from "@/lib/election-api";
+import { useGlobalCountdown } from "@/lib/CountdownContext";
+
+type Candidate = {
+  id: number;
+  name: string;
+  description: string;
+  isActive: boolean;
+};
+
+type Election = {
+  id: number;
+  title: string;
+  description: string;
+  startTime?: string;
+  endTime?: string;
+  isActive: boolean;
+};
 import { useToast } from "@/hooks/use-toast";
 
 const VotingInterface = () => {
@@ -16,6 +33,9 @@ const VotingInterface = () => {
   const [voting, setVoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const [reloadKey, setReloadKey] = useState(0);
+  const { reset: resetCountdown } = useGlobalCountdown();
 
   useEffect(() => {
     const fetchElectionData = async () => {
@@ -25,8 +45,51 @@ const VotingInterface = () => {
         const data = await electionApi.getCurrentElection();
         
         if (data) {
-          setElection(data.election);
-          setCandidates(data.candidates);
+          // Transform the election data to match our Election type
+          const electionData: Election = {
+            id: data.election.id,
+            title: data.election.title,
+            description: data.election.description,
+            isActive: data.election.isActive !== false,
+            startTime: data.election.startTime ? new Date(data.election.startTime).toISOString() : new Date().toISOString(),
+            endTime: data.election.endTime ? new Date(data.election.endTime).toISOString() : undefined
+          };
+
+          setElection(electionData);
+
+          // Prefer Admin Panel overrides for initial display to keep names in sync
+          const ADMIN_API_BASE = (import.meta as any).env?.VITE_ADMIN_URL || 'http://localhost:3001';
+          try {
+            const res = await fetch(`${ADMIN_API_BASE}/api/admin/elections/${electionData.id}/candidates`);
+            const json = await res.json();
+            if (json && json.success && Array.isArray(json.data)) {
+              const adminCandidates: Candidate[] = json.data.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                description: c.description,
+                isActive: c.isActive !== false,
+              }));
+              setCandidates(adminCandidates);
+            } else {
+              // Fallback to backend candidates
+              const candidatesData: Candidate[] = (data.candidates || []).map((candidate: any) => ({
+                id: candidate.id,
+                name: candidate.name,
+                description: candidate.description,
+                isActive: candidate.isActive !== false
+              }));
+              setCandidates(candidatesData);
+            }
+          } catch {
+            // Fallback if admin panel is unavailable
+            const candidatesData: Candidate[] = (data.candidates || []).map((candidate: any) => ({
+              id: candidate.id,
+              name: candidate.name,
+              description: candidate.description,
+              isActive: candidate.isActive !== false
+            }));
+            setCandidates(candidatesData);
+          }
         } else {
           // Handle case where no elections are available
           setError('No active elections found. Please check back later.');
@@ -45,7 +108,7 @@ const VotingInterface = () => {
     };
 
     fetchElectionData();
-  }, [toast]);
+  }, [toast, reloadKey]);
 
   useEffect(() => {
     if (!election) return;
@@ -59,6 +122,22 @@ const VotingInterface = () => {
           setCandidates((prev) => prev.map((c) => c.id === Number(msg.candidateId) ? { ...c, name: msg.name ?? c.name, description: msg.description ?? c.description } : c));
         } else if (msg.type === 'remove') {
           setCandidates((prev) => prev.filter((c) => c.id !== Number(msg.candidateId)));
+        } else if (msg.type === 'add') {
+          setCandidates((prev) => {
+            const exists = prev.some((c) => c.id === Number(msg.candidateId));
+            if (exists) {
+              return prev.map((c) => c.id === Number(msg.candidateId) ? { ...c, name: msg.name ?? c.name, description: msg.description ?? c.description, isActive: true } : c);
+            }
+            return [
+              ...prev,
+              {
+                id: Number(msg.candidateId),
+                name: msg.name || 'New Candidate',
+                description: msg.description || '',
+                isActive: true,
+              }
+            ];
+          });
         }
       } catch {}
     };
@@ -71,7 +150,14 @@ const VotingInterface = () => {
   }, [election?.id]);
 
   const handleVote = async () => {
-    if (!selectedCandidate || !election) return;
+    if (!selectedCandidate || !election) {
+      toast({
+        title: "Selection Required",
+        description: "Please select a candidate before voting.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       setVoting(true);
@@ -118,8 +204,10 @@ const VotingInterface = () => {
           console.error('Failed to notify admin panel:', notifyErr);
         }
 
-        // Redirect to confirmation page
-        window.location.href = '/confirmation';
+        // Navigate to confirmation first (to avoid timeout redirect race),
+        // then end this voter's session immediately
+        navigate('/confirmation');
+        resetCountdown(0);
       } else {
         toast({
           title: "Voting Failed",
@@ -159,7 +247,7 @@ const VotingInterface = () => {
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2">Error Loading Election</h2>
           <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={() => window.location.reload()}>
+          <Button onClick={() => setReloadKey((k) => k + 1)}>
             Try Again
           </Button>
         </div>
@@ -259,16 +347,7 @@ const VotingInterface = () => {
                             <p className="text-sm text-muted-foreground mb-2">
                               {candidate.description}
                             </p>
-                            <div className="flex gap-2">
-                              <Badge variant="secondary" className="text-xs">
-                                ID: {candidate.id}
-                              </Badge>
-                              {candidate.voteCount > 0 && (
-                                <Badge variant="outline" className="text-xs">
-                                  Votes: {candidate.voteCount}
-                                </Badge>
-                              )}
-                            </div>
+                            <div className="flex gap-2" />
                           </div>
                         </div>
                       </CardContent>

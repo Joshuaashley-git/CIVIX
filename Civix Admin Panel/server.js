@@ -197,10 +197,12 @@ app.post('/api/admin/elections/:id/candidates', async (req, res) => {
     }
 
     const result = await adminService.addCandidate(electionId, name, description);
-    res.json({
-      success: true,
-      data: result
-    });
+    // Broadcast addition so frontends update in realtime
+    if (result && (result.candidateId || result.data?.candidateId)) {
+      const candidateId = result.candidateId || result.data?.candidateId;
+      broadcastCandidateUpdate({ type: 'add', electionId, candidateId, name, description });
+    }
+    res.json({ success: true, data: result });
   } catch (error) {
     console.error('Add candidate error:', error);
     res.status(500).json({

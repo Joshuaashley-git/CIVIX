@@ -232,11 +232,19 @@ router.get('/elections/:electionId/votes', adminAuth, async (req, res) => {
   }
 });
 
-// Remove a candidate — not supported by current smart contract
+// "Remove" a candidate by disabling on-chain
 router.delete('/elections/:electionId/candidates/:candidateId', adminAuth, async (req, res) => {
-  return res.status(501).json({
-    error: 'Candidate removal is not supported by the current smart contract. You can add candidates, but removing or disabling requires a contract upgrade.'
-  });
+  try {
+    const { electionId, candidateId } = req.params;
+    const result = await blockchainService.setCandidateActive(parseInt(electionId), parseInt(candidateId), false);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json({ success: true, data: { transactionHash: result.transactionHash, blockNumber: result.blockNumber, isActive: false } });
+  } catch (error) {
+    console.error('Disable candidate error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Get real-time vote counts for a specific election

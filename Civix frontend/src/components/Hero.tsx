@@ -1,7 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight, Shield, Users, CheckCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Hero = () => {
+  const navigate = useNavigate();
   return (
     <section className="relative min-h-[80vh] flex items-center justify-center px-6 md:px-8 lg:px-12 overflow-hidden">
       {/* Background Pattern */}
@@ -61,7 +63,7 @@ const Hero = () => {
             variant="hero" 
             size="lg" 
             className="group relative overflow-hidden"
-            onClick={() => window.location.href = '/id-proof'}
+            onClick={() => navigate('/id-proof')}
           >
             <span className="relative z-10 flex items-center gap-2">
               Start Casting

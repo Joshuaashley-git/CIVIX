@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/ashley/Documents/CIVIX/Civix Backend/contracts/CivixVoting.sol": {
-      "lastModificationDate": 1758757470661,
-      "contentHash": "169fa3e5be032534be2f73a4e27fc57b",
+      "lastModificationDate": 1761768302505,
+      "contentHash": "0c6f68833b13393fefa93ef64be0ba8a",
       "sourceName": "contracts/CivixVoting.sol",
       "solcConfig": {
         "version": "0.8.19",

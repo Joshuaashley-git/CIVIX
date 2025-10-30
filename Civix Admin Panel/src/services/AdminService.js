@@ -141,29 +141,11 @@ class AdminService {
   async getCandidates(electionId) {
     try {
       const response = await this.apiClient.get(`/elections/${electionId}/candidates`);
-      let list = response.data.data || [];
-
-      // Apply persistent removals from JSON store
-      const removedIds = new Set(store.getRemovedCandidates(electionId).map(Number));
-      if (removedIds.size) {
-        list = list.filter((c) => !removedIds.has(Number(c.id)));
-      }
-
-      // Apply persistent overrides from JSON store
-      const overridesMap = store.getCandidateOverrides(electionId);
-      list = list.map((c) => {
-        const ov = overridesMap[String(c.id)] || {};
-        return {
-          ...c,
-          name: ov.name ?? c.name,
-          description: ov.description ?? c.description,
-        };
-      });
-
+      const list = (response.data.data || []).filter((c) => c.isActive !== false);
       return list;
     } catch (error) {
       console.error(`Failed to get candidates for election ${electionId}:`, error.message);
-      throw new Error(`Failed to fetch candidates for election ${electionId}`);
+      throw new Error(`Failed to fetch candidates for ${electionId}`);
     }
   }
 
@@ -209,13 +191,20 @@ class AdminService {
   }
 
   async removeCandidateUi(electionId, candidateId) {
-    store.addRemovedCandidate(electionId, candidateId);
-    return { success: true };
+    // Disable candidate on-chain via backend admin
+    const response = await this.apiClient.delete(`/admin/elections/${electionId}/candidates/${candidateId}`);
+    return response.data || { success: true };
   }
 
   async updateCandidateUi(electionId, candidateId, payload) {
-    store.setCandidateOverride(electionId, candidateId, payload);
-    return { success: true };
+    // Update candidate on-chain via backend admin
+    const response = await this.apiClient.patch(`/admin/elections/${electionId}/candidates/${candidateId}`, payload);
+    return response.data || { success: true };
+  }
+
+  async setCandidateActive(electionId, candidateId, isActive) {
+    const response = await this.apiClient.patch(`/admin/elections/${electionId}/candidates/${candidateId}/status`, { isActive: !!isActive });
+    return response.data || { success: true };
   }
 
   async getAllVotes() {

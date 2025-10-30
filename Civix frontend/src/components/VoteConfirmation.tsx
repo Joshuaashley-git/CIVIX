@@ -1,10 +1,13 @@
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
+import { useGlobalCountdown } from "@/lib/CountdownContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Globe, HelpCircle, CheckCircle, Download, Home, Vote } from "lucide-react";
 
 const VoteConfirmation = () => {
-  const timeRemaining = "01:45";
+  const navigate = useNavigate();
+  const { formatted, reset } = useGlobalCountdown();
 
   return (
     <div className="min-h-screen bg-gradient-subtle font-display">
@@ -14,7 +17,7 @@ const VoteConfirmation = () => {
           <h1 className="text-2xl font-bold text-primary">Civix</h1>
           <div className="flex items-center gap-2 text-accent font-semibold">
             <Clock className="w-4 h-4" />
-            <span className="text-lg">{timeRemaining}</span>
+            <span className="text-lg">{formatted}</span>
           </div>
         </div>
         
@@ -99,7 +102,7 @@ const VoteConfirmation = () => {
               <Button 
                 size="lg"
                 className="bg-gradient-accent hover:shadow-lg hover:scale-105 transition-all duration-300"
-                onClick={() => window.location.href = '/'}
+                onClick={() => { reset(120); navigate('/'); }}
               >
                 <Home className="w-5 h-5 mr-2" />
                 Return Home

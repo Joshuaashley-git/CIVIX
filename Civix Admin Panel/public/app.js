@@ -476,10 +476,10 @@ function renderCandidatesTable() {
                             ${candidate.voteCount || 0}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                            <button onclick="openEditCandidate(${candidate.electionId}, ${candidate.id})" class="text-blue-600 hover:text-blue-900">
+                            <button type="button" class="text-blue-600 hover:text-blue-900 edit-candidate-btn" data-election-id="${candidate.electionId}" data-candidate-id="${candidate.id}">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button onclick="removeCandidate(${candidate.electionId}, ${candidate.id})" class="text-red-600 hover:text-red-900">
+                            <button type="button" class="text-red-600 hover:text-red-900 remove-candidate-btn" data-election-id="${candidate.electionId}" data-candidate-id="${candidate.id}">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
@@ -701,6 +701,34 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => showTab(name));
         }
     });
+
+    // Event delegation for dynamically rendered candidate actions
+    const candidatesTableContainer = document.getElementById('candidates-table');
+    if (candidatesTableContainer) {
+        candidatesTableContainer.addEventListener('click', (ev) => {
+            const target = ev.target;
+            if (!target) return;
+            let btn = target;
+            // climb up if icon was clicked
+            if (btn.tagName && btn.tagName.toLowerCase() !== 'button') {
+                if (btn.closest) { btn = btn.closest('button'); }
+            }
+            if (!btn || !btn.classList) return;
+            if (btn.classList.contains('edit-candidate-btn')) {
+                const eid = parseInt(btn.getAttribute('data-election-id'));
+                const cid = parseInt(btn.getAttribute('data-candidate-id'));
+                if (!isNaN(eid) && !isNaN(cid)) {
+                    openEditCandidate(eid, cid);
+                }
+            } else if (btn.classList.contains('remove-candidate-btn')) {
+                const eid = parseInt(btn.getAttribute('data-election-id'));
+                const cid = parseInt(btn.getAttribute('data-candidate-id'));
+                if (!isNaN(eid) && !isNaN(cid)) {
+                    removeCandidate(eid, cid);
+                }
+            }
+        });
+    }
 });
 
 // Realtime updates via Server-Sent Events (SSE)

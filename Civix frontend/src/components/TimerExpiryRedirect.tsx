@@ -8,7 +8,9 @@ const TimerExpiryRedirect = () => {
   const location = useLocation();
 
   useEffect(() => {
-    if (isComplete && location.pathname !== "/timeout") {
+    if (!isComplete) return;
+    const allowedPaths = ["/timeout", "/confirmation"]; // do not force redirect from confirmation
+    if (!allowedPaths.includes(location.pathname)) {
       navigate("/timeout", { replace: true });
     }
   }, [isComplete, navigate, location.pathname]);

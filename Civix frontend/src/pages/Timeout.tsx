@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { useGlobalCountdown } from "@/lib/CountdownContext";
+import { useNavigate } from "react-router-dom";
 
 const Timeout = () => {
   const { reset } = useGlobalCountdown();
+  const navigate = useNavigate();
 
   const restart = () => {
     reset(120); // restart 2-minute session
-    window.location.href = "/";
+    navigate("/");
   };
 
   return (
